@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
 export const CATEGORY_LABELS = {
   sport: 'Sport',
@@ -88,16 +89,39 @@ export function getCar(id) {
   return CARS.find((c) => c.id === id) || CARS[0];
 }
 
+const WHEEL_MODEL_URL = './assets/models/wheel/neova.fbx';
+let wheelTemplatePromise = null;
+
+/**
+ * Loads the real tire mesh once (a hollow tread ring — no hub/rim modeled,
+ * and its texture references are missing like every other scan here, so it
+ * gets a flat rubber material). Cached geometry, cloned per wheel below.
+ */
+function loadWheelTemplate() {
+  if (wheelTemplatePromise) return wheelTemplatePromise;
+  wheelTemplatePromise = (async () => {
+    const fbx = await new FBXLoader().loadAsync(WHEEL_MODEL_URL);
+    const mesh = fbx.getObjectByName('Circle');
+    mesh.geometry.computeVertexNormals();
+    const box = new THREE.Box3().setFromObject(mesh);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    return { geometry: mesh.geometry, diameter: size.y }; // native axle axis is local X already
+  })();
+  return wheelTemplatePromise;
+}
+
 /** Builds the 4 wheel visual groups shared by every car — procedural model or not. */
-function buildWheels(def) {
-  const wheelGeo = new THREE.CylinderGeometry(def.wheelRadius, def.wheelRadius, 0.32, 24);
-  const wheelMat = new THREE.MeshPhysicalMaterial({ color: 0x141414, roughness: 0.85, clearcoat: 0.2 });
+async function buildWheels(def) {
+  const { geometry, diameter } = await loadWheelTemplate();
+  const scale = (def.wheelRadius * 2) / diameter;
+  const tireMat = new THREE.MeshPhysicalMaterial({ color: 0x141414, roughness: 0.85, clearcoat: 0.2 });
   const rimMat = new THREE.MeshPhysicalMaterial({ color: 0xc7ccd2, metalness: 0.95, roughness: 0.18, clearcoat: 0.5 });
   const wheels = [];
   for (let i = 0; i < 4; i++) {
     const wheel = new THREE.Group();
-    const tire = new THREE.Mesh(wheelGeo, wheelMat);
-    tire.rotation.z = Math.PI / 2;
+    const tire = new THREE.Mesh(geometry, tireMat);
+    tire.scale.setScalar(scale);
     tire.castShadow = true;
     const rim = new THREE.Mesh(new THREE.CylinderGeometry(def.wheelRadius * 0.55, def.wheelRadius * 0.55, 0.34, 12), rimMat);
     rim.rotation.z = Math.PI / 2;
@@ -136,7 +160,7 @@ function roundedBox(w, h, l, radius, color, metalness, roughness, clearcoat = 0.
 }
 
 /** Builds a smooth, rounded-panel stylized car mesh + 4 wheel meshes, sized to its physics chassis. */
-function buildProceduralCarVisual(def) {
+async function buildProceduralCarVisual(def) {
   const { w, h, l } = def.dims;
   const group = new THREE.Group();
 
@@ -190,7 +214,7 @@ function buildProceduralCarVisual(def) {
   }
 
   group.castShadow = true;
-  const wheels = buildWheels(def);
+  const wheels = await buildWheels(def);
   return { group, wheels };
 }
 
@@ -273,15 +297,11 @@ async function buildModelCarVisual(def) {
   const template = await loadModelTemplate(def);
   const group = new THREE.Group();
   group.add(template.clone(true));
-  const wheels = buildWheels(def);
+  const wheels = await buildWheels(def);
   return { group, wheels };
 }
 
-/**
- * Builds a car's visual (body + wheels). Procedural cars resolve synchronously;
- * model-backed cars (e.g. the Challenger) return a Promise — `await` works on
- * both since awaiting a non-promise value resolves immediately.
- */
+/** Builds a car's visual (body + wheels) — always async (model and wheel assets are loaded/cached, not baked in). */
 export function buildCarVisual(def) {
   if (def.modelUrl) return buildModelCarVisual(def);
   return buildProceduralCarVisual(def);
