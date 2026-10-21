@@ -183,6 +183,10 @@ html, body {
 .select-item .swatch {
   width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; margin-top: 4px;
 }
+.select-item .car-icon {
+  width: 56px; height: 56px; object-fit: contain; flex-shrink: 0;
+  background: rgba(255,255,255,0.04); border-radius: 6px;
+}
 .select-item .name {
   font-weight: 600; font-size: 15px;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

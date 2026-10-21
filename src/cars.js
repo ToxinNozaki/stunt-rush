@@ -15,10 +15,11 @@ export const CATEGORY_LABELS = {
 export const CARS = [
   {
     id: 'challenger',
-    name: '"89" Challenger',
-    desc: 'Classic muscle, heavy and raw — real recorded engine audio and a scanned, fully modeled body.',
+    icon: './assets/icons/challenger.png',
+    name: 'Hellcat Challenger',
+    desc: 'Classic muscle, heavy and raw — real recorded engine audio and a fully modeled Hellcat body.',
     category: 'muscle',
-    color: 0x4d1000,
+    color: 0x0a0a0a,
     accent: 0x151515,
     mass: 1700,
     engineForce: 4300,
@@ -27,19 +28,20 @@ export const CARS = [
     frictionSlip: 1.8,
     rollInfluence: 0.03,
     topSpeedKmh: 225,
-    dims: { w: 1.888, h: 1.358, l: 4.9 },
+    dims: { w: 2.115, h: 1.288, l: 4.9 },
     wheelRadius: 0.4,
     spoiler: false,
     style: 'muscle',
     drivetrain: 'rwd',
     modelUrl: './assets/models/challenger/challenger.obj',
     mtlUrl: './assets/models/challenger/challenger.mtl',
-    // Permutation that maps the scan's own axes (X=length, Y=width, Z=height)
-    // onto the game's car-local axes (X=width/right, Y=height/up, Z=length/forward).
+    // This scan came from a proper Blender/FBX scene export (not a raw scan)
+    // and is already Y-up with Z-forward — same convention the game uses, so
+    // this is an identity basis, unlike every other model here.
     modelBasis: {
-      x: new THREE.Vector3(0, 0, 1),
-      y: new THREE.Vector3(1, 0, 0),
-      z: new THREE.Vector3(0, 1, 0),
+      x: new THREE.Vector3(1, 0, 0),
+      y: new THREE.Vector3(0, 1, 0),
+      z: new THREE.Vector3(0, 0, 1),
     },
     engineSoundSet: {
       layers: [
@@ -51,6 +53,7 @@ export const CARS = [
   },
   {
     id: 'lada',
+    icon: './assets/icons/lada.png',
     name: 'Samara GT',
     desc: 'A cheap, light hatchback with just enough power to swing the back end out — the underground drift favorite.',
     category: 'drift',
@@ -280,7 +283,11 @@ async function loadModelTemplate(def) {
     box.getCenter(center);
     raw.position.sub(center);
 
-    const scale = def.dims.l / size.x; // scan's local X is the car's length axis
+    // Scale off whichever source axis modelBasis maps to the game's forward
+    // (Z) axis — that's the scan's own length axis, but which raw XYZ
+    // component that is isn't consistent between different artists' exports.
+    const lengthAxis = ['x', 'y', 'z'].find((k) => Math.abs(def.modelBasis[k].z) > 0.5);
+    const scale = def.dims.l / size[lengthAxis];
     const wrapper = new THREE.Group();
     wrapper.add(raw);
     wrapper.matrixAutoUpdate = false;

@@ -33,10 +33,15 @@ they work the same on a Chromebook as on a full keyboard.
   just unused by the roster) while the focus is on real-model quality:
   | Car | Category | Notes |
   | --- | --- | --- |
-  | "89" Challenger | Muscle | Real scanned model, real recorded Hellcat engine audio |
+  | Hellcat Challenger | Muscle | Real scanned model, real recorded Hellcat engine audio |
   | Samara GT | Drift | Real scanned model (VAZ 2108 Lada), cheap and tail-happy |
+  Every wheel also uses a real scanned tire tread mesh (`assets/models/wheel/`)
+  paired with a procedural chrome rim, instead of a plain cylinder.
   More real-model cars (McLaren Senna, Ferrari Testarossa, a Mustang) are
   queued up — see Known limitations.
+- Each car's select-screen card shows a baked studio-angle icon instead of a
+  flat color swatch (`assets/icons/`, see "Baking a car icon" below) — bake
+  one for every new car added to the roster.
 - Real vehicle physics (cannon-es `RaycastVehicle`: suspension, slip,
   handbrake oversteer tuned to power-slide rather than stall when throttle
   and handbrake are held together) plus GTA5-style air control to right the
@@ -52,12 +57,11 @@ they work the same on a Chromebook as on a full keyboard.
 - Graphics presets (Low/Medium/High/Ultra) plus manual sliders for shadows,
   bloom, draw distance, and pixel ratio, all saved locally
 - A hand-drawn gauge-cluster speedometer, minimap, and stunt tracker
-- A rigged lowpoly driver seated in every car (`src/driver.js`, `FBXLoader`),
-  hand-posed from its standing bind pose into a seated driving stance
-  (shoulders/elbows swung forward, hips/knees bent so the legs don't clip
-  straight through the floor — there's no seated pose or animation clip
-  shipped with the asset), with the forearms rotating live off the car's
-  current steer ratio each frame
+- `window.__sceneDump()` — a standing dev tool (always available in the
+  console, see `src/main.js`) that lists every mesh/group currently in the
+  scene with its world position. Run it during any manual test pass to catch
+  leftover geometry a cleanup bug left behind (e.g. the orphaned wheels bug
+  below) instead of having to spot it by eye in a screenshot.
 
 ## Tech
 
@@ -96,29 +100,64 @@ the working pattern, scripted with `pymeshlab`, is:
 4. If the scan's paint panels lost their texture reference and fell back to
    flat gray, set `paintTint` on the car entry — `classifyScanMaterial` in
    `src/cars.js` will tint unsaturated mid-gray materials with it instead of
-   rendering bare primer.
+   rendering bare primer. If instead the decimated materials come out with
+   genuinely distinguishable colors (some scans do, depending on how the
+   source `.mtl` was authored), `paintTint` isn't needed at all —
+   `classifyScanMaterial`'s saturation/brightness heuristic handles it.
+5. Not every scan needs the wheel-stripping step — if the source scene
+   already has the wheels as separate named objects from the body (check
+   with `grep "^o "` on the `.obj`), just extract the body object directly
+   and skip straight to decimation.
+6. Watch for `modelBasis` and the length-axis assumption together: the scale
+   calculation picks whichever raw axis `modelBasis` maps to the game's
+   forward (Z) axis — it does NOT assume the scan's own local X is always
+   length. A model exported from a proper Blender/FBX scene (not a raw scan)
+   may already be standard Y-up/Z-forward, in which case `modelBasis` is
+   just the identity and no remapping happens at all.
+7. pymeshlab's OBJ exporter can throw `MemoryError('bad allocation')` on
+   some meshes for no obvious reason (hit this on the Mustang asset, a
+   111MB/750k-vert source with ~20 materials). If it does, PLY and DAE
+   export both work as a fallback — but they drop per-face material
+   grouping entirely, so that escape hatch only helps if you don't need the
+   named materials. No fix found yet; that asset is on hold until there's a
+   working path.
+
+### Baking a car icon
+
+Every car needs a baked select-screen icon in `assets/icons/<id>.png`,
+referenced by the `icon` field on its `CARS` entry — do this for every new
+car. There's no in-repo script for it (it was done once, ad hoc, in a
+browser console session): load the car with `buildCarVisual`, light it with
+3 directional lights plus an ambient fill (flat procedural materials need a
+lot of light to read clearly — roughly 6x the intensity that looks right in
+the actual game scene), frame it at a 3/4 angle from a `Box3` computed over
+the body *and* wheels, render to an off-screen canvas at 512×512, and save
+the `canvas.toDataURL('image/png')` output as a PNG.
 
 ## Known limitations
 
-- Single-player only — there's no backend, by design, so this can live on
-  GitHub Pages for free, forever, with nothing to keep running.
+- Single-player only for now. LAN play is planned (not built yet): someone
+  hosting a party runs a small local signaling server, the game gets a "LAN"
+  menu tab to point at that host's local IP and see a live room list, and
+  actual gameplay runs peer-to-peer over WebRTC — no public server, no
+  hosting cost, matches the "no backend to maintain" philosophy for the base
+  game. A real internet-wide public server list is explicitly out of scope —
+  that needs always-on hosting, which contradicts why this runs on GitHub
+  Pages in the first place.
 - Scattered desert boulders in Red Canyon are decorative and have no
   collision.
-- **The driver's seat position is an approximation.** There's no real
-  interior/seat reference per car — `seatDriver` in `src/driver.js` places
-  it from a generic offset based on each car's chassis dims (`def.dims`),
-  verified on Challenger and Samara GT but not tuned per-car beyond that.
-  The original rig asset (a `.c4d` Cinema 4D file) was unusable — this
-  driver is a different, separately-sourced lowpoly rigged character
-  (`.fbx`, `vendor/three/jsm/loaders/FBXLoader.js`), with no animation clips
-  bundled, so the whole driving pose (arms, hips, knees) is hand-posed from
-  its standing bind pose via quaternion deltas (see the `*_SWING` / `*_BEND`
-  constants in `src/driver.js`) rather than blended from a real pose/clip.
+- **No driver model in the cars right now.** An earlier attempt seated a
+  lowpoly rigged character (`src/driver.js`, unused but kept), but getting a
+  standing-rig character into a convincing seated silhouette (no seated pose
+  or animation clip shipped with the asset — the legs needed hand-posed hip/
+  knee bends, and even then the head sat at an inconsistent height across
+  different cars' rooflines) wasn't worth the result. Removed rather than
+  ship something that looks broken.
 - McLaren Senna (118MB scan) and Ferrari Testarossa (7MB scan) assets are on
-  hand but not yet integrated. A Mustang OBJ (111MB, ~750k verts) was also
-  just added — note its `.mtl` file is missing from that asset, so it has no
-  material/color data at all; that needs sorting out before it goes through
-  the same cleanup pipeline as the Challenger.
+  hand but not yet integrated. A Mustang OBJ (111MB, ~750k verts, no `.mtl`)
+  is also on hand — decimation works, but pymeshlab's OBJ exporter throws a
+  `MemoryError` on this one specifically (see the pymeshlab notes above);
+  shelved until that's sorted out.
 - Ground/building materials across all 3 maps are still flat procedural
   colors — real PBR texture sets (asphalt, concrete, brick, etc.) were
   provided early on but haven't been wired in yet.
