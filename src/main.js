@@ -145,7 +145,7 @@ function clearLevel() {
   state.wheelMeshes = null;
 }
 
-function loadLevel(mapId, carId) {
+async function loadLevel(mapId, carId) {
   clearLevel();
 
   const levelGroup = new THREE.Group();
@@ -163,11 +163,12 @@ function loadLevel(mapId, carId) {
   const vehicle = new Vehicle(world, carDef, result.spawn, result.spawnYaw || 0);
   state.vehicle = vehicle;
 
-  const { group, wheels } = buildCarVisual(carDef);
+  const { group, wheels } = await buildCarVisual(carDef);
   scene.add(group);
   for (const wheel of wheels) scene.add(wheel);
   state.carGroup = group;
   state.wheelMeshes = wheels;
+  carAudio.setCar(carDef);
 
   vehicle.chassisBody.addEventListener('collide', (e) => {
     const impact = Math.abs(e.contact.getImpactVelocityAlongNormal());
@@ -184,8 +185,11 @@ function loadLevel(mapId, carId) {
 // --- menus / UI ---------------------------------------------------------------
 const hud = new Hud(document.getElementById('hud-canvas'));
 const menus = new Menus({
-  onStart(mapId, carId) {
-    loadLevel(mapId, carId);
+  async onStart(mapId, carId) {
+    menus.show('loading');
+    menus.setLoadProgress(70, 'Loading car...');
+    await loadLevel(mapId, carId);
+    menus.setLoadProgress(100, 'Ready');
     state.mode = 'playing';
     menus.show('hud');
   },

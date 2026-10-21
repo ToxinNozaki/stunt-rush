@@ -1,14 +1,18 @@
 import { settings } from './storage.js';
 
 /**
- * Fully procedural engine/tire/wind audio — no sample files, so the repo
- * stays tiny and there's zero licensing risk. Engine pitch/tone is driven
- * by RPM and throttle each frame from game.js.
+ * Engine/tire/wind audio. Most cars use fully procedural synthesis — no
+ * sample files, zero licensing risk. A car can opt into real recorded engine
+ * samples via `engineSoundSet` (idle/accelerating loops crossfaded by RPM,
+ * plus a one-shot startup clip); everything else (wind, screech, horn,
+ * thump) stays procedural either way.
  */
 export class CarAudio {
   constructor() {
     this.ctx = null;
     this.started = false;
+    this.sampleMode = false;
+    this._bufferSetCache = new Map();
   }
 
   _ensureStarted() {
@@ -104,6 +108,82 @@ export class CarAudio {
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
 
+  /** Switches the engine layer for the given car — sample-based if it has an engineSoundSet, procedural otherwise. */
+  setCar(def) {
+    this._ensureStarted();
+    if (def.engineSoundSet) this._enableSampleEngine(def.engineSoundSet);
+    else this._disableSampleEngine();
+  }
+
+  async _loadBufferSet(soundSet) {
+    const key = soundSet.idle;
+    if (this._bufferSetCache.has(key)) return this._bufferSetCache.get(key);
+    const promise = Promise.all(
+      Object.entries(soundSet).map(async ([name, url]) => {
+        const res = await fetch(url);
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = await this.ctx.decodeAudioData(arrayBuffer);
+        return [name, buffer];
+      })
+    ).then(Object.fromEntries);
+    this._bufferSetCache.set(key, promise);
+    return promise;
+  }
+
+  _stopSampleSources() {
+    for (const src of [this.idleSource, this.accelSource]) {
+      if (!src) continue;
+      try { src.stop(); } catch { /* already stopped */ }
+    }
+    this.idleSource = null;
+    this.accelSource = null;
+  }
+
+  async _enableSampleEngine(soundSet) {
+    const requestId = (this._sampleRequestId = (this._sampleRequestId || 0) + 1);
+    const buffers = await this._loadBufferSet(soundSet);
+    if (requestId !== this._sampleRequestId) return; // a newer car was selected while this was loading
+
+    const ctx = this.ctx;
+    this._stopSampleSources();
+
+    this.idleGain = this.idleGain || ctx.createGain();
+    this.accelGain = this.accelGain || ctx.createGain();
+    this.idleGain.connect(this.engineBus);
+    this.accelGain.connect(this.engineBus);
+
+    this.idleSource = ctx.createBufferSource();
+    this.idleSource.buffer = buffers.idle;
+    this.idleSource.loop = true;
+    this.idleSource.connect(this.idleGain);
+    this.idleSource.start();
+
+    this.accelSource = ctx.createBufferSource();
+    this.accelSource.buffer = buffers.accelerating;
+    this.accelSource.loop = true;
+    this.accelSource.connect(this.accelGain);
+    this.accelSource.start();
+
+    if (buffers.startup) {
+      const startupSrc = ctx.createBufferSource();
+      startupSrc.buffer = buffers.startup;
+      const g = ctx.createGain();
+      g.gain.value = (settings.engineVolume / 100) * 0.6;
+      startupSrc.connect(g);
+      g.connect(this.engineBus);
+      startupSrc.start();
+    }
+
+    this.sampleMode = true;
+    this.engineGain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.05);
+  }
+
+  _disableSampleEngine() {
+    this._sampleRequestId = (this._sampleRequestId || 0) + 1;
+    this._stopSampleSources();
+    this.sampleMode = false;
+  }
+
   /**
    * @param rpm 0..1 normalized engine speed
    * @param throttle 0..1
@@ -114,15 +194,23 @@ export class CarAudio {
     if (!this.started) return;
     this._applyVolumes();
     const t = this.ctx.currentTime;
-    const baseFreq = 38 + rpm * 165;
 
-    this.oscA.frequency.setTargetAtTime(baseFreq, t, 0.03);
-    this.oscB.frequency.setTargetAtTime(baseFreq * 1.004, t, 0.03);
-    this.oscC.frequency.setTargetAtTime(baseFreq * 0.5, t, 0.03);
-    this.filter.frequency.setTargetAtTime(500 + rpm * 2600 + throttle * 600, t, 0.05);
-
-    const vol = 0.18 + rpm * 0.5 + throttle * 0.18;
-    this.engineGain.gain.setTargetAtTime(vol, t, 0.04);
+    if (this.sampleMode && this.idleSource && this.accelSource) {
+      const accelAmt = Math.min(1, rpm * 0.9 + throttle * 0.3);
+      this.idleGain.gain.setTargetAtTime((1 - accelAmt) * 0.9, t, 0.08);
+      this.accelGain.gain.setTargetAtTime(accelAmt * 0.95, t, 0.08);
+      const rate = 0.85 + rpm * 0.5 + throttle * 0.15;
+      this.idleSource.playbackRate.setTargetAtTime(rate, t, 0.08);
+      this.accelSource.playbackRate.setTargetAtTime(rate, t, 0.08);
+    } else {
+      const baseFreq = 38 + rpm * 165;
+      this.oscA.frequency.setTargetAtTime(baseFreq, t, 0.03);
+      this.oscB.frequency.setTargetAtTime(baseFreq * 1.004, t, 0.03);
+      this.oscC.frequency.setTargetAtTime(baseFreq * 0.5, t, 0.03);
+      this.filter.frequency.setTargetAtTime(500 + rpm * 2600 + throttle * 600, t, 0.05);
+      const vol = 0.18 + rpm * 0.5 + throttle * 0.18;
+      this.engineGain.gain.setTargetAtTime(vol, t, 0.04);
+    }
 
     const windVol = Math.min(1, speedMs / 55) * 0.35;
     this.windGain.gain.setTargetAtTime(windVol, t, 0.1);
