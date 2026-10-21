@@ -2,13 +2,21 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 
+export const CATEGORY_LABELS = {
+  sport: 'Sport',
+  super: 'Supercar',
+  muscle: 'Muscle',
+  drift: 'Drift',
+};
+
 // Stats are tuned, not flavor text — mass/force/grip all feed the physics
 // in vehicle.js directly, so each car actually drives differently.
 export const CARS = [
   {
     id: 'raptor',
     name: 'Raptor GT',
-    desc: 'Balanced all-rounder',
+    desc: 'Sharp, predictable, and quick to learn — the default pick for stunts and tight technical sections alike.',
+    category: 'sport',
     color: 0xff7a1a,
     accent: 0x1a1a1a,
     mass: 1250,
@@ -27,7 +35,8 @@ export const CARS = [
   {
     id: 'viper',
     name: 'Viper RS',
-    desc: 'Supercar — blistering, twitchy',
+    desc: 'A supercar with a hair-trigger throttle — brutal in a straight line, punishes a careless turn-in.',
+    category: 'super',
     color: 0xe0122c,
     accent: 0x0a0a0a,
     mass: 1150,
@@ -46,7 +55,8 @@ export const CARS = [
   {
     id: 'bulldog',
     name: 'Bulldog SS',
-    desc: 'Muscle car — torque for days',
+    desc: 'Big American muscle — not the quickest off the line, but the torque makes every launch and landing feel heavy.',
+    category: 'muscle',
     color: 0xffce1f,
     accent: 0x222222,
     mass: 1650,
@@ -65,7 +75,8 @@ export const CARS = [
   {
     id: 'wraith',
     name: 'Wraith Drift',
-    desc: 'Loose grip, built for slides',
+    desc: 'Purpose-built to slide — low grip, quick steering, and a handbrake tuned to kick the rear out and hold it.',
+    category: 'drift',
     color: 0x8a2be2,
     accent: 0x1a1a1a,
     mass: 1200,
@@ -84,7 +95,8 @@ export const CARS = [
   {
     id: 'hyperion',
     name: 'Hyperion X',
-    desc: 'Hypercar — fastest, least forgiving',
+    desc: 'The fastest car here and the least forgiving — huge top speed, razor-thin margin for error.',
+    category: 'super',
     color: 0x2fd1c7,
     accent: 0x0a0a0a,
     mass: 1100,
@@ -103,7 +115,8 @@ export const CARS = [
   {
     id: 'challenger',
     name: '"89" Challenger',
-    desc: 'Classic muscle — heavy and raw',
+    desc: 'Classic muscle, heavy and raw — real recorded engine audio and a scanned, fully modeled body.',
+    category: 'muscle',
     color: 0x4d1000,
     accent: 0x151515,
     mass: 1700,
@@ -132,6 +145,40 @@ export const CARS = [
       accelerating: './assets/audio/hellcat/accelerating.wav',
       startup: './assets/audio/hellcat/startup.wav',
     },
+  },
+  {
+    id: 'lada',
+    name: 'Samara GT',
+    desc: 'A cheap, light hatchback with just enough power to swing the back end out — the underground drift favorite.',
+    category: 'drift',
+    color: 0x1a3fae,
+    accent: 0x111111,
+    mass: 980,
+    engineForce: 3100,
+    brakeForce: 80,
+    maxSteer: 0.58,
+    frictionSlip: 1.0,
+    rollInfluence: 0.016,
+    topSpeedKmh: 195,
+    dims: { w: 1.633, h: 1.078, l: 4.0 },
+    wheelRadius: 0.32,
+    spoiler: false,
+    style: 'drift',
+    drivetrain: 'rwd',
+    modelUrl: './assets/models/vaz2108/vaz2108.obj',
+    mtlUrl: './assets/models/vaz2108/vaz2108.mtl',
+    // This scan's own axes are X=length, Y=height, Z=width — a straight
+    // X/Z swap would mirror the model (determinant -1), so Z is also
+    // negated to keep the mapping a proper rotation.
+    modelBasis: {
+      x: new THREE.Vector3(0, 0, -1),
+      y: new THREE.Vector3(0, 1, 0),
+      z: new THREE.Vector3(1, 0, 0),
+    },
+    // This scan's paint panels have no color data (lost texture references,
+    // flat gray Kd fallback) — mid-gray, unsaturated materials get tinted
+    // with this color instead of rendering as bare primer.
+    paintTint: 0x1a3fae,
   },
 ];
 
@@ -245,14 +292,21 @@ function buildProceduralCarVisual(def) {
   return { group, wheels };
 }
 
-// --- model-based body: a real scanned mesh (currently only the Challenger) ------
+// --- model-based body: real scanned meshes (Challenger, Samara GT) --------------
 
 const modelTemplateCache = new Map();
 
-function classifyScanMaterial(color) {
+function classifyScanMaterial(color, paintTint) {
   const { r, g, b } = color;
   const brightness = (r + g + b) / 3;
   const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+
+  if (paintTint !== undefined && saturation < 0.06 && brightness > 0.25 && brightness < 0.78) {
+    // This scan lost its paint texture and left a flat gray fallback —
+    // tint it with the car's chosen paint color instead of rendering bare primer.
+    const tint = new THREE.Color(paintTint);
+    return new THREE.MeshPhysicalMaterial({ color: tint, metalness: 0.6, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.08 });
+  }
   if (saturation > 0.12) {
     // Saturated color -> body paint: deep clearcoat over a metallic base.
     return new THREE.MeshPhysicalMaterial({ color, metalness: 0.6, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08 });
@@ -283,8 +337,8 @@ async function loadModelTemplate(def) {
     raw.traverse((child) => {
       if (!child.isMesh) return;
       child.material = Array.isArray(child.material)
-        ? child.material.map((m) => classifyScanMaterial(m.color))
-        : classifyScanMaterial(child.material.color);
+        ? child.material.map((m) => classifyScanMaterial(m.color, def.paintTint))
+        : classifyScanMaterial(child.material.color, def.paintTint);
       child.castShadow = true;
       child.receiveShadow = true;
     });

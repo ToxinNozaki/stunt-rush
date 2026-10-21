@@ -234,8 +234,12 @@ function syncCarVisual() {
 }
 
 function estimateRpm(telem) {
-  const base = input.isDown('throttle') ? 0.32 : 0.12;
-  return Math.min(1, base + telem.speedRatio * 0.72);
+  // Dominated by actual speed (relative to this car's top speed) so the
+  // engine note tracks the speedometer — a small throttle "kick" on top
+  // for immediate pedal response, not a flat offset that maxes out the
+  // sound long before the car is anywhere near top speed.
+  const throttleKick = input.isDown('throttle') ? 0.08 : 0;
+  return Math.min(1, telem.speedRatio * 0.92 + throttleKick);
 }
 
 function updateStuntTracking(dt, telem, nowSec) {

@@ -1,4 +1,4 @@
-import { CARS } from './cars.js';
+import { CARS, CATEGORY_LABELS } from './cars.js';
 import { MAPS } from './maps/index.js';
 import { settings, saveSettings, applyPreset, GRAPHICS_PRESETS, BINDING_LABELS, DEFAULT_BINDINGS } from './storage.js';
 import { input } from './input.js';
@@ -127,7 +127,7 @@ export class Menus {
       const el = document.createElement('div');
       el.className = 'select-item' + (c.id === this.selectedCar ? ' active' : '');
       const colorHex = '#' + c.color.toString(16).padStart(6, '0');
-      el.innerHTML = `<div class="swatch" style="background:${colorHex}"></div><div class="name">${c.name}</div><div class="desc">${c.desc}</div>`;
+      el.innerHTML = `<div class="swatch" style="background:${colorHex}"></div><div class="name">${c.name}<span class="category-badge category-${c.category}">${CATEGORY_LABELS[c.category] || c.category}</span></div><div class="desc">${c.desc}</div>`;
       el.addEventListener('click', () => { this.selectedCar = c.id; this._renderSelect(); });
       carList.appendChild(el);
     }

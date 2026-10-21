@@ -119,10 +119,15 @@ export class Vehicle {
     for (let i = 0; i < 4; i++) this.vehicle.setBrake(brakeForce, i);
 
     if (handbrake && grounded) {
-      this.vehicle.setBrake(def.brakeForce * 90, 2);
-      this.vehicle.setBrake(def.brakeForce * 90, 3);
-      this.vehicle.wheelInfos[2].frictionSlip = this._baseFrictionSlip * 0.35;
-      this.vehicle.wheelInfos[3].frictionSlip = this._baseFrictionSlip * 0.35;
+      // Breaking rear grip is what starts the slide; hard-locking the rears
+      // too is only for a stationary handbrake turn — with throttle also
+      // held it would just fight the engine and stall the power-slide.
+      if (!throttle) {
+        this.vehicle.setBrake(def.brakeForce * 90, 2);
+        this.vehicle.setBrake(def.brakeForce * 90, 3);
+      }
+      this.vehicle.wheelInfos[2].frictionSlip = this._baseFrictionSlip * 0.3;
+      this.vehicle.wheelInfos[3].frictionSlip = this._baseFrictionSlip * 0.3;
     } else {
       this.vehicle.wheelInfos[2].frictionSlip = this._baseFrictionSlip;
       this.vehicle.wheelInfos[3].frictionSlip = this._baseFrictionSlip;

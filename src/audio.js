@@ -196,10 +196,11 @@ export class CarAudio {
     const t = this.ctx.currentTime;
 
     if (this.sampleMode && this.idleSource && this.accelSource) {
-      const accelAmt = Math.min(1, rpm * 0.9 + throttle * 0.3);
-      this.idleGain.gain.setTargetAtTime((1 - accelAmt) * 0.9, t, 0.08);
-      this.accelGain.gain.setTargetAtTime(accelAmt * 0.95, t, 0.08);
-      const rate = 0.85 + rpm * 0.5 + throttle * 0.15;
+      // rpm already tracks actual speed (see estimateRpm in main.js) — crossfade
+      // and pitch straight off it so the sample doesn't sound maxed-out early.
+      this.idleGain.gain.setTargetAtTime((1 - rpm) * 0.9, t, 0.08);
+      this.accelGain.gain.setTargetAtTime(rpm * 0.95, t, 0.08);
+      const rate = 0.8 + rpm * 0.55;
       this.idleSource.playbackRate.setTargetAtTime(rate, t, 0.08);
       this.accelSource.playbackRate.setTargetAtTime(rate, t, 0.08);
     } else {
@@ -207,8 +208,8 @@ export class CarAudio {
       this.oscA.frequency.setTargetAtTime(baseFreq, t, 0.03);
       this.oscB.frequency.setTargetAtTime(baseFreq * 1.004, t, 0.03);
       this.oscC.frequency.setTargetAtTime(baseFreq * 0.5, t, 0.03);
-      this.filter.frequency.setTargetAtTime(500 + rpm * 2600 + throttle * 600, t, 0.05);
-      const vol = 0.18 + rpm * 0.5 + throttle * 0.18;
+      this.filter.frequency.setTargetAtTime(500 + rpm * 2600 + throttle * 250, t, 0.05);
+      const vol = 0.18 + rpm * 0.55 + throttle * 0.12;
       this.engineGain.gain.setTargetAtTime(vol, t, 0.04);
     }
 
