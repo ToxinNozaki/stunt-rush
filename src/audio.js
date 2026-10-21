@@ -1,11 +1,26 @@
 import { settings } from './storage.js';
 
+// Default engine sound ladder — used by any car that doesn't define its own
+// `engineSoundSet` (e.g. the Challenger's real Hellcat recordings). Four
+// loops spread across the RPM range, crossfaded by `at` (0..1), plus a
+// startup/shutdown one-shot.
+export const DEFAULT_ENGINE_SOUND_SET = {
+  layers: [
+    { key: 'idle', url: './assets/audio/generic/idle.mp3', at: 0 },
+    { key: 'low', url: './assets/audio/generic/low.mp3', at: 0.33 },
+    { key: 'med', url: './assets/audio/generic/med.mp3', at: 0.66 },
+    { key: 'high', url: './assets/audio/generic/high.mp3', at: 1 },
+  ],
+  startup: './assets/audio/generic/startup.mp3',
+  stop: './assets/audio/generic/stop.mp3',
+};
+
 /**
- * Engine/tire/wind audio. Most cars use fully procedural synthesis — no
- * sample files, zero licensing risk. A car can opt into real recorded engine
- * samples via `engineSoundSet` (idle/accelerating loops crossfaded by RPM,
- * plus a one-shot startup clip); everything else (wind, screech, horn,
- * thump) stays procedural either way.
+ * Engine/tire/wind audio. Every car plays a real recorded engine sample
+ * ladder (loops crossfaded by RPM, see `engineSoundSet` — `DEFAULT_ENGINE_SOUND_SET`
+ * unless a car defines its own, like the Challenger's Hellcat recordings);
+ * a fully procedural synth engine (no samples at all) is kept as a fallback
+ * path. Wind, tire screech, horn, and impact thump are always procedural.
  */
 export class CarAudio {
   constructor() {
@@ -13,6 +28,7 @@ export class CarAudio {
     this.started = false;
     this.sampleMode = false;
     this._bufferSetCache = new Map();
+    this._layerNodes = [];
   }
 
   _ensureStarted() {
@@ -108,65 +124,76 @@ export class CarAudio {
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
 
-  /** Switches the engine layer for the given car — sample-based if it has an engineSoundSet, procedural otherwise. */
+  /** Switches the engine sound ladder for the given car (its own `engineSoundSet`, or the default). */
   setCar(def) {
     this._ensureStarted();
-    if (def.engineSoundSet) this._enableSampleEngine(def.engineSoundSet);
-    else this._disableSampleEngine();
+    this._enableSampleEngine(def.engineSoundSet || DEFAULT_ENGINE_SOUND_SET);
   }
 
-  async _loadBufferSet(soundSet) {
-    const key = soundSet.idle;
-    if (this._bufferSetCache.has(key)) return this._bufferSetCache.get(key);
-    const promise = Promise.all(
-      Object.entries(soundSet).map(async ([name, url]) => {
-        const res = await fetch(url);
-        const arrayBuffer = await res.arrayBuffer();
-        const buffer = await this.ctx.decodeAudioData(arrayBuffer);
-        return [name, buffer];
-      })
-    ).then(Object.fromEntries);
-    this._bufferSetCache.set(key, promise);
+  async _loadSoundSet(soundSet) {
+    if (this._bufferSetCache.has(soundSet)) return this._bufferSetCache.get(soundSet);
+    const loadOne = async (url) => {
+      const res = await fetch(url);
+      const arrayBuffer = await res.arrayBuffer();
+      return this.ctx.decodeAudioData(arrayBuffer);
+    };
+    const promise = (async () => {
+      const layers = await Promise.all(
+        soundSet.layers.map(async (layer) => ({ ...layer, buffer: await loadOne(layer.url) }))
+      );
+      const startup = soundSet.startup ? await loadOne(soundSet.startup) : null;
+      const stop = soundSet.stop ? await loadOne(soundSet.stop) : null;
+      return { layers, startup, stop };
+    })();
+    this._bufferSetCache.set(soundSet, promise);
     return promise;
   }
 
   _stopSampleSources() {
-    for (const src of [this.idleSource, this.accelSource]) {
-      if (!src) continue;
-      try { src.stop(); } catch { /* already stopped */ }
+    for (const node of this._layerNodes) {
+      try { node.source.stop(); } catch { /* already stopped */ }
     }
-    this.idleSource = null;
-    this.accelSource = null;
+    this._layerNodes = [];
+  }
+
+  /** Call when leaving/respawning out of a sample-engine car, if a shutdown clip exists. */
+  playEngineStop() {
+    if (!this._currentStopBuffer) return;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this._currentStopBuffer;
+    const g = ctx.createGain();
+    g.gain.value = (settings.engineVolume / 100) * 0.6;
+    src.connect(g);
+    g.connect(this.engineBus);
+    src.start();
   }
 
   async _enableSampleEngine(soundSet) {
     const requestId = (this._sampleRequestId = (this._sampleRequestId || 0) + 1);
-    const buffers = await this._loadBufferSet(soundSet);
+    const { layers, startup, stop } = await this._loadSoundSet(soundSet);
     if (requestId !== this._sampleRequestId) return; // a newer car was selected while this was loading
 
     const ctx = this.ctx;
     this._stopSampleSources();
+    this._currentStopBuffer = stop;
 
-    this.idleGain = this.idleGain || ctx.createGain();
-    this.accelGain = this.accelGain || ctx.createGain();
-    this.idleGain.connect(this.engineBus);
-    this.accelGain.connect(this.engineBus);
+    this._layerNodes = layers.map(({ key, at, buffer }) => {
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      gain.connect(this.engineBus);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(gain);
+      source.start();
+      return { key, at, gain, source };
+    });
+    this._layerNodes.sort((a, b) => a.at - b.at);
 
-    this.idleSource = ctx.createBufferSource();
-    this.idleSource.buffer = buffers.idle;
-    this.idleSource.loop = true;
-    this.idleSource.connect(this.idleGain);
-    this.idleSource.start();
-
-    this.accelSource = ctx.createBufferSource();
-    this.accelSource.buffer = buffers.accelerating;
-    this.accelSource.loop = true;
-    this.accelSource.connect(this.accelGain);
-    this.accelSource.start();
-
-    if (buffers.startup) {
+    if (startup) {
       const startupSrc = ctx.createBufferSource();
-      startupSrc.buffer = buffers.startup;
+      startupSrc.buffer = startup;
       const g = ctx.createGain();
       g.gain.value = (settings.engineVolume / 100) * 0.6;
       startupSrc.connect(g);
@@ -176,12 +203,6 @@ export class CarAudio {
 
     this.sampleMode = true;
     this.engineGain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.05);
-  }
-
-  _disableSampleEngine() {
-    this._sampleRequestId = (this._sampleRequestId || 0) + 1;
-    this._stopSampleSources();
-    this.sampleMode = false;
   }
 
   /**
@@ -195,14 +216,20 @@ export class CarAudio {
     this._applyVolumes();
     const t = this.ctx.currentTime;
 
-    if (this.sampleMode && this.idleSource && this.accelSource) {
+    if (this.sampleMode && this._layerNodes.length) {
       // rpm already tracks actual speed (see estimateRpm in main.js) — crossfade
-      // and pitch straight off it so the sample doesn't sound maxed-out early.
-      this.idleGain.gain.setTargetAtTime((1 - rpm) * 0.9, t, 0.08);
-      this.accelGain.gain.setTargetAtTime(rpm * 0.95, t, 0.08);
-      const rate = 0.8 + rpm * 0.55;
-      this.idleSource.playbackRate.setTargetAtTime(rate, t, 0.08);
-      this.accelSource.playbackRate.setTargetAtTime(rate, t, 0.08);
+      // across the layer ladder off it so the sample doesn't sound maxed-out early.
+      const nodes = this._layerNodes;
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const prev = nodes[i - 1];
+        const next = nodes[i + 1];
+        let gain;
+        if (prev && rpm < node.at) gain = (rpm - prev.at) / (node.at - prev.at);
+        else if (next && rpm > node.at) gain = 1 - (rpm - node.at) / (next.at - node.at);
+        else gain = 1;
+        node.gain.gain.setTargetAtTime(Math.max(0, Math.min(1, gain)), t, 0.08);
+      }
     } else {
       const baseFreq = 38 + rpm * 165;
       this.oscA.frequency.setTargetAtTime(baseFreq, t, 0.03);

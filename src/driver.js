@@ -10,6 +10,8 @@ const TARGET_HEIGHT = 1.75;
 // the source file to build on.
 const UPPER_ARM_SWING = -1.75;
 const FOREARM_BEND = -0.75;
+const THIGH_SWING = -1.5;
+const SHIN_BEND = 1.5;
 const STEER_WIGGLE_MAX = 0.5; // extra forearm rotation (radians) at full steering lock
 
 let templatePromise = null;
@@ -29,20 +31,27 @@ async function loadTemplate() {
       upR: fbx.getObjectByName('DEFUpArmR'),
       armL: fbx.getObjectByName('DEFForArmL'),
       armR: fbx.getObjectByName('DEFForArmR'),
+      legL: fbx.getObjectByName('DEFUplegL'),
+      legR: fbx.getObjectByName('DEFUplegR'),
+      shinL: fbx.getObjectByName('DEFForlegL'),
+      shinR: fbx.getObjectByName('DEFForlegR'),
     };
-    const bindQuat = {
-      upL: bones.upL.quaternion.clone(),
-      upR: bones.upR.quaternion.clone(),
-      armL: bones.armL.quaternion.clone(),
-      armR: bones.armR.quaternion.clone(),
-    };
+    const bindQuat = {};
+    for (const key in bones) bindQuat[key] = bones[key].quaternion.clone();
+
     const worldX = new THREE.Vector3(1, 0, 0);
     const swing = new THREE.Quaternion().setFromAxisAngle(worldX, UPPER_ARM_SWING);
     const bend = new THREE.Quaternion().setFromAxisAngle(worldX, FOREARM_BEND);
+    const thighSwing = new THREE.Quaternion().setFromAxisAngle(worldX, THIGH_SWING);
+    const shinBend = new THREE.Quaternion().setFromAxisAngle(worldX, SHIN_BEND);
     bones.upL.quaternion.copy(bindQuat.upL).premultiply(swing);
     bones.upR.quaternion.copy(bindQuat.upR).premultiply(swing);
     bones.armL.quaternion.copy(bindQuat.armL).premultiply(bend);
     bones.armR.quaternion.copy(bindQuat.armR).premultiply(bend);
+    bones.legL.quaternion.copy(bindQuat.legL).premultiply(thighSwing);
+    bones.legR.quaternion.copy(bindQuat.legR).premultiply(thighSwing);
+    bones.shinL.quaternion.copy(bindQuat.shinL).premultiply(shinBend);
+    bones.shinR.quaternion.copy(bindQuat.shinR).premultiply(shinBend);
     const drivingQuat = {
       armL: bones.armL.quaternion.clone(),
       armR: bones.armR.quaternion.clone(),

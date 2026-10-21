@@ -28,35 +28,36 @@ they work the same on a Chromebook as on a full keyboard.
 
 - **3 maps** — Stunt Park (loops and launch ramps), Neon City (open-world
   rooftop gap jumps), Red Canyon (desert drift roads and dune jumps)
-- **7 cars** across 3 categories — Sport, Supercar, Muscle, and Drift — each
-  with genuinely different handling (mass, engine force, grip, and steering
-  angle all feed the physics directly, not just flavor text):
+- **2 cars, both real scanned 3D models** — the procedural low-poly cars are
+  shelved for now (`buildProceduralCarVisual` in `src/cars.js` still works,
+  just unused by the roster) while the focus is on real-model quality:
   | Car | Category | Notes |
   | --- | --- | --- |
-  | Raptor GT | Sport | Balanced all-rounder, easiest to learn |
-  | Viper RS | Supercar | Blistering and twitchy |
-  | Bulldog SS | Muscle | Torque for days, procedural body |
-  | Wraith Drift | Drift | Low grip, tuned for slides, procedural body |
-  | Hyperion X | Supercar | Fastest, least forgiving |
-  | "89" Challenger | Muscle | Real scanned 3D model, real recorded Hellcat engine audio |
-  | Samara GT | Drift | Real scanned 3D model (VAZ 2108 Lada), cheap and tail-happy |
+  | "89" Challenger | Muscle | Real scanned model, real recorded Hellcat engine audio |
+  | Samara GT | Drift | Real scanned model (VAZ 2108 Lada), cheap and tail-happy |
+  More real-model cars (McLaren Senna, Ferrari Testarossa, a Mustang) are
+  queued up — see Known limitations.
 - Real vehicle physics (cannon-es `RaycastVehicle`: suspension, slip,
   handbrake oversteer tuned to power-slide rather than stall when throttle
   and handbrake are held together) plus GTA5-style air control to right the
   car before landing
-- Engine audio is procedurally synthesized (Web Audio API, no sample files,
-  nothing to license) for most cars; the Challenger opts into real recorded
-  engine samples (idle/accelerating loops crossfaded by actual road speed,
-  not just throttle input, so it never sounds maxed-out at low speed) —
-  everything else (wind, tire screech, horn, impact thump) stays procedural
-  either way
+- Engine audio is real recorded samples by default now — a 4-stage RPM
+  ladder (idle/low/med/high, crossfaded by actual road speed so it never
+  sounds maxed-out at low speed) plus startup/shutdown one-shots
+  (`DEFAULT_ENGINE_SOUND_SET` in `src/audio.js`); the Challenger overrides it
+  with its own 2-stage Hellcat recordings. A fully procedural synth engine
+  (zero sample files) still exists as a fallback path, just unused by
+  default. Wind, tire screech, horn, and impact thump stay procedural either
+  way.
 - Graphics presets (Low/Medium/High/Ultra) plus manual sliders for shadows,
   bloom, draw distance, and pixel ratio, all saved locally
 - A hand-drawn gauge-cluster speedometer, minimap, and stunt tracker
 - A rigged lowpoly driver seated in every car (`src/driver.js`, `FBXLoader`),
-  posed by hand from its bind pose into a driving stance (no "steering"
-  animation clip shipped with the asset), with the forearms rotating live
-  off the car's current steer ratio each frame
+  hand-posed from its standing bind pose into a seated driving stance
+  (shoulders/elbows swung forward, hips/knees bent so the legs don't clip
+  straight through the floor — there's no seated pose or animation clip
+  shipped with the asset), with the forearms rotating live off the car's
+  current steer ratio each frame
 
 ## Tech
 
@@ -106,14 +107,18 @@ the working pattern, scripted with `pymeshlab`, is:
 - **The driver's seat position is an approximation.** There's no real
   interior/seat reference per car — `seatDriver` in `src/driver.js` places
   it from a generic offset based on each car's chassis dims (`def.dims`),
-  which looks reasonable on the cars tested (Raptor GT, Challenger) but may
-  need per-car tuning on others, especially the lower/wider supercars. The
-  original rig asset (a `.c4d` Cinema 4D file) was unusable — this driver is
-  a different, separately-sourced lowpoly rigged character (`.fbx`,
-  `vendor/three/jsm/loaders/FBXLoader.js`), with no animation clips bundled,
-  so the driving pose is hand-posed from its bind pose via quaternion deltas
-  on the shoulder/elbow bones (see `UPPER_ARM_SWING` / `FOREARM_BEND` in
-  `src/driver.js`) rather than blended from a real "steering" animation.
+  verified on Challenger and Samara GT but not tuned per-car beyond that.
+  The original rig asset (a `.c4d` Cinema 4D file) was unusable — this
+  driver is a different, separately-sourced lowpoly rigged character
+  (`.fbx`, `vendor/three/jsm/loaders/FBXLoader.js`), with no animation clips
+  bundled, so the whole driving pose (arms, hips, knees) is hand-posed from
+  its standing bind pose via quaternion deltas (see the `*_SWING` / `*_BEND`
+  constants in `src/driver.js`) rather than blended from a real pose/clip.
 - McLaren Senna (118MB scan) and Ferrari Testarossa (7MB scan) assets are on
-  hand but not yet integrated — same cleanup pipeline as the Challenger,
-  just not done yet.
+  hand but not yet integrated. A Mustang OBJ (111MB, ~750k verts) was also
+  just added — note its `.mtl` file is missing from that asset, so it has no
+  material/color data at all; that needs sorting out before it goes through
+  the same cleanup pipeline as the Challenger.
+- Ground/building materials across all 3 maps are still flat procedural
+  colors — real PBR texture sets (asphalt, concrete, brick, etc.) were
+  provided early on but haven't been wired in yet.
