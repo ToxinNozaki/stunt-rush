@@ -301,26 +301,29 @@ function classifyScanMaterial(color, paintTint) {
   const brightness = (r + g + b) / 3;
   const saturation = Math.max(r, g, b) - Math.min(r, g, b);
 
+  // DoubleSide: aggressive decimation on these scans flips triangle winding
+  // on a scattered subset of faces, which single-sided rendering shows as
+  // sharp-edged black patches (the face is lit from its invisible backside).
   if (paintTint !== undefined && saturation < 0.06 && brightness > 0.25 && brightness < 0.78) {
     // This scan lost its paint texture and left a flat gray fallback —
     // tint it with the car's chosen paint color instead of rendering bare primer.
     const tint = new THREE.Color(paintTint);
-    return new THREE.MeshPhysicalMaterial({ color: tint, metalness: 0.6, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.08 });
+    return new THREE.MeshPhysicalMaterial({ color: tint, metalness: 0.6, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide });
   }
   if (saturation > 0.12) {
     // Saturated color -> body paint: deep clearcoat over a metallic base.
-    return new THREE.MeshPhysicalMaterial({ color, metalness: 0.6, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08 });
+    return new THREE.MeshPhysicalMaterial({ color, metalness: 0.6, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide });
   }
   if (brightness < 0.12) {
     // Near-black -> rubber seals / grille / matte trim.
-    return new THREE.MeshPhysicalMaterial({ color, metalness: 0.15, roughness: 0.8 });
+    return new THREE.MeshPhysicalMaterial({ color, metalness: 0.15, roughness: 0.8, side: THREE.DoubleSide });
   }
   if (brightness > 0.6) {
     // Bright neutral -> polished chrome trim.
-    return new THREE.MeshPhysicalMaterial({ color, metalness: 0.95, roughness: 0.12 });
+    return new THREE.MeshPhysicalMaterial({ color, metalness: 0.95, roughness: 0.12, side: THREE.DoubleSide });
   }
   // Mid gray -> painted/brushed metal panel.
-  return new THREE.MeshPhysicalMaterial({ color, metalness: 0.5, roughness: 0.4 });
+  return new THREE.MeshPhysicalMaterial({ color, metalness: 0.5, roughness: 0.4, side: THREE.DoubleSide });
 }
 
 async function loadModelTemplate(def) {
@@ -336,6 +339,7 @@ async function loadModelTemplate(def) {
 
     raw.traverse((child) => {
       if (!child.isMesh) return;
+      child.geometry.computeVertexNormals(); // decimation leaves some source normals noisy/stale
       child.material = Array.isArray(child.material)
         ? child.material.map((m) => classifyScanMaterial(m.color, def.paintTint))
         : classifyScanMaterial(child.material.color, def.paintTint);

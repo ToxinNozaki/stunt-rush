@@ -53,6 +53,10 @@ they work the same on a Chromebook as on a full keyboard.
 - Graphics presets (Low/Medium/High/Ultra) plus manual sliders for shadows,
   bloom, draw distance, and pixel ratio, all saved locally
 - A hand-drawn gauge-cluster speedometer, minimap, and stunt tracker
+- A rigged lowpoly driver seated in every car (`src/driver.js`, `FBXLoader`),
+  posed by hand from its bind pose into a driving stance (no "steering"
+  animation clip shipped with the asset), with the forearms rotating live
+  off the car's current steer ratio each frame
 
 ## Tech
 
@@ -99,17 +103,17 @@ the working pattern, scripted with `pymeshlab`, is:
   GitHub Pages for free, forever, with nothing to keep running.
 - Scattered desert boulders in Red Canyon are decorative and have no
   collision.
-- **No animated driver in the cars yet.** The rigged character asset
-  provided for this is a `.c4d` (Cinema 4D) file, which nothing in this dev
-  environment can open or convert — no Cinema 4D, no Blender installed here.
-  It needs either: someone with real Cinema 4D/Blender access to export it
-  to `.glb`/`.gltf` or `.fbx`, or a replacement rig sourced somewhere that
-  exports to a web-friendly format directly (e.g. Mixamo, which gives free
-  rigged humanoid characters as `.fbx`/`.glb` with animation clips). Once a
-  usable rig file exists, it loads the same way the Challenger does
-  (`GLTFLoader`/`FBXLoader` instead of `OBJLoader`), gets seated per car, and
-  its wrist/forearm bones (or a bundled "steering" clip, blended by time
-  position) get driven each frame by the car's current steer ratio.
+- **The driver's seat position is an approximation.** There's no real
+  interior/seat reference per car — `seatDriver` in `src/driver.js` places
+  it from a generic offset based on each car's chassis dims (`def.dims`),
+  which looks reasonable on the cars tested (Raptor GT, Challenger) but may
+  need per-car tuning on others, especially the lower/wider supercars. The
+  original rig asset (a `.c4d` Cinema 4D file) was unusable — this driver is
+  a different, separately-sourced lowpoly rigged character (`.fbx`,
+  `vendor/three/jsm/loaders/FBXLoader.js`), with no animation clips bundled,
+  so the driving pose is hand-posed from its bind pose via quaternion deltas
+  on the shoulder/elbow bones (see `UPPER_ARM_SWING` / `FOREARM_BEND` in
+  `src/driver.js`) rather than blended from a real "steering" animation.
 - McLaren Senna (118MB scan) and Ferrari Testarossa (7MB scan) assets are on
   hand but not yet integrated — same cleanup pipeline as the Challenger,
   just not done yet.

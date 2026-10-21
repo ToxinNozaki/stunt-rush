@@ -78,6 +78,11 @@ export class Vehicle {
     return this.groundedWheelCount === 0;
   }
 
+  /** Current steering angle as a -1..1 ratio of this car's max steer — used to pose the driver's hands. */
+  get steerRatio() {
+    return this.vehicle.wheelInfos[0].steering / this.def.maxSteer;
+  }
+
   update(dt, input) {
     const def = this.def;
     const body = this.chassisBody;

@@ -9,6 +9,7 @@ import { input } from './input.js';
 import { carAudio } from './audio.js';
 import { Vehicle } from './vehicle.js';
 import { getCar, buildCarVisual } from './cars.js';
+import { seatDriver } from './driver.js';
 import { getMap } from './maps/index.js';
 import { GameCamera } from './camera.js';
 import { Hud } from './hud.js';
@@ -128,6 +129,7 @@ const state = {
   vehicle: null,
   carGroup: null,
   wheelMeshes: null,
+  driver: null,
   mapBounds: 300,
   airborne: false,
   airStart: 0,
@@ -168,6 +170,7 @@ async function loadLevel(mapId, carId) {
   for (const wheel of wheels) scene.add(wheel);
   state.carGroup = group;
   state.wheelMeshes = wheels;
+  state.driver = await seatDriver(group, carDef);
   carAudio.setCar(carDef);
 
   vehicle.chassisBody.addEventListener('collide', (e) => {
@@ -300,6 +303,7 @@ function animate() {
     syncCarVisual();
 
     const telem = state.vehicle.getTelemetry();
+    if (state.driver) state.driver.update(state.vehicle.steerRatio);
     updateStuntTracking(dt, telem, now / 1000);
     carAudio.update(estimateRpm(telem), input.isDown('throttle') ? 1 : 0, telem.speedMs, telem.slip);
     gameCamera.update(dt, state.carGroup, telem);
