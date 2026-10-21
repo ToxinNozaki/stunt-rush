@@ -9,7 +9,6 @@ import { input } from './input.js';
 import { carAudio } from './audio.js';
 import { Vehicle } from './vehicle.js';
 import { getCar, buildCarVisual } from './cars.js';
-import { seatDriver } from './driver.js';
 import { getMap } from './maps/index.js';
 import { GameCamera } from './camera.js';
 import { Hud } from './hud.js';
@@ -25,6 +24,29 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xaecbe8, settings.drawDistance * 0.3, settings.drawDistance);
+
+// Dev/testing aid: dumps every object currently in the scene with its world
+// position, so stray leftover geometry (orphaned wheels, old car bodies,
+// anything a cleanup bug left behind) shows up at a glance instead of
+// having to spot it by eye in a screenshot. Call from the console/test
+// harness: window.__sceneDump()
+window.__sceneDump = () => {
+  const out = [];
+  const worldPos = new THREE.Vector3();
+  scene.traverse((obj) => {
+    if (!obj.isMesh && !obj.isGroup) return;
+    obj.getWorldPosition(worldPos);
+    out.push({
+      name: obj.name || '(unnamed)',
+      type: obj.type,
+      isMesh: !!obj.isMesh,
+      visible: obj.visible,
+      pos: [+worldPos.x.toFixed(2), +worldPos.y.toFixed(2), +worldPos.z.toFixed(2)],
+      parent: obj.parent?.name || obj.parent?.type || null,
+    });
+  });
+  return out;
+};
 
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, settings.drawDistance * 1.4);
 const gameCamera = new GameCamera(camera);
@@ -129,7 +151,6 @@ const state = {
   vehicle: null,
   carGroup: null,
   wheelMeshes: null,
-  driver: null,
   mapBounds: 300,
   airborne: false,
   airStart: 0,
@@ -142,6 +163,7 @@ function clearLevel() {
   state.levelBodies = [];
   if (state.vehicle) state.vehicle.vehicle.removeFromWorld(world);
   if (state.carGroup) scene.remove(state.carGroup);
+  if (state.wheelMeshes) for (const wheel of state.wheelMeshes) scene.remove(wheel);
   state.vehicle = null;
   state.carGroup = null;
   state.wheelMeshes = null;
@@ -170,7 +192,6 @@ async function loadLevel(mapId, carId) {
   for (const wheel of wheels) scene.add(wheel);
   state.carGroup = group;
   state.wheelMeshes = wheels;
-  state.driver = await seatDriver(group, carDef);
   carAudio.setCar(carDef);
 
   vehicle.chassisBody.addEventListener('collide', (e) => {
@@ -303,7 +324,6 @@ function animate() {
     syncCarVisual();
 
     const telem = state.vehicle.getTelemetry();
-    if (state.driver) state.driver.update(state.vehicle.steerRatio);
     updateStuntTracking(dt, telem, now / 1000);
     carAudio.update(estimateRpm(telem), input.isDown('throttle') ? 1 : 0, telem.speedMs, telem.slip);
     gameCamera.update(dt, state.carGroup, telem);
