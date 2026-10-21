@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Stunt Rush</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Chakra+Petch:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/jsm/",
+    "cannon-es": "./vendor/cannon-es/cannon-es.js"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="viewport"></canvas>
+
+  <div id="loading-screen">
+    <div class="loading-inner">
+      <div class="logo">STUNT<span>RUSH</span></div>
+      <div class="load-bar"><div class="load-bar-fill" id="load-fill"></div></div>
+      <div class="load-label" id="load-label">Loading assets...</div>
+    </div>
+  </div>
+
+  <div id="main-menu" class="screen hidden">
+    <div class="menu-panel">
+      <div class="logo">STUNT<span>RUSH</span></div>
+      <div class="menu-sub">open world stunt driving</div>
+      <button class="btn btn-primary" id="btn-play">Play</button>
+      <button class="btn" id="btn-settings">Settings</button>
+      <div class="menu-footer">WASD / Arrows to drive · Space handbrake · In air: steer to flip</div>
+    </div>
+  </div>
+
+  <div id="select-screen" class="screen hidden">
+    <div class="select-panel">
+      <div class="select-col">
+        <div class="select-title">Choose Map</div>
+        <div class="select-list" id="map-list"></div>
+      </div>
+      <div class="select-col">
+        <div class="select-title">Choose Car</div>
+        <div class="select-list" id="car-list"></div>
+        <div class="car-stats" id="car-stats"></div>
+      </div>
+      <div class="select-actions">
+        <button class="btn" id="btn-back-menu">Back</button>
+        <button class="btn btn-primary" id="btn-start">Start Driving</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-screen" class="screen hidden">
+    <div class="settings-panel">
+      <div class="select-title">Settings</div>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="graphics">Graphics</button>
+        <button class="tab-btn" data-tab="controls">Controls</button>
+        <button class="tab-btn" data-tab="audio">Audio</button>
+      </div>
+
+      <div class="tab-panel" data-tab="graphics">
+        <div class="setting-row">
+          <label>Preset</label>
+          <div class="preset-group" id="preset-group">
+            <button data-preset="low">Low</button>
+            <button data-preset="medium">Medium</button>
+            <button data-preset="high">High</button>
+            <button data-preset="ultra">Ultra</button>
+          </div>
+        </div>
+        <div class="setting-row"><label>Shadows</label><input type="checkbox" id="opt-shadows"></div>
+        <div class="setting-row"><label>Bloom</label><input type="checkbox" id="opt-bloom"></div>
+        <div class="setting-row"><label>Draw Distance</label><input type="range" id="opt-drawdist" min="80" max="600" step="10"></div>
+        <div class="setting-row"><label>Pixel Ratio</label><input type="range" id="opt-pixelratio" min="50" max="100" step="10"></div>
+        <div class="setting-row"><label>Speed Units</label>
+          <div class="preset-group" id="unit-group">
+            <button data-unit="kmh">km/h</button>
+            <button data-unit="mph">mph</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel hidden" data-tab="controls">
+        <div class="rebind-hint">Click a binding, then press the new key. Esc cancels. These defaults work on any keyboard, Chromebooks included.</div>
+        <div class="rebind-list" id="rebind-list"></div>
+        <button class="btn" id="btn-reset-binds">Reset to Defaults</button>
+      </div>
+
+      <div class="tab-panel hidden" data-tab="audio">
+        <div class="setting-row"><label>Engine Volume</label><input type="range" id="opt-vol-engine" min="0" max="100" step="5"></div>
+        <div class="setting-row"><label>Effects Volume</label><input type="range" id="opt-vol-fx" min="0" max="100" step="5"></div>
+      </div>
+
+      <div class="select-actions">
+        <button class="btn btn-primary" id="btn-settings-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hud" class="screen hidden">
+    <canvas id="hud-canvas"></canvas>
+    <div id="pause-hint">Esc — Pause</div>
+    <div id="stunt-popup"></div>
+  </div>
+
+  <div id="pause-menu" class="screen hidden">
+    <div class="menu-panel">
+      <div class="select-title">Paused</div>
+      <button class="btn btn-primary" id="btn-resume">Resume</button>
+      <button class="btn" id="btn-pause-settings">Settings</button>
+      <button class="btn" id="btn-respawn">Respawn Car</button>
+      <button class="btn" id="btn-quit">Quit to Menu</button>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
