@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
 const MODEL_URL = './assets/models/driver/lowpoly-characters.fbx';
-const TARGET_HEIGHT = 1.75;
+const TARGET_HEIGHT = 1.3; // shrunk from a real 1.75m — the seated pose keeps the head at standing height (no hip lowering), so a life-size character sticks too far out of any of these low cabins
 
 // Rotation (radians, around the character's own local X axis) that takes the
 // bind pose — arms relaxed at the sides — into a seated, hands-forward
@@ -87,7 +87,7 @@ export async function seatDriver(carGroup, def) {
   if (wrapper.parent) wrapper.parent.remove(wrapper);
 
   const { w, h, l } = def.dims;
-  wrapper.position.set(-w * 0.15, -h * 0.72, -l * 0.03);
+  wrapper.position.set(-w * 0.15, -h * 0.5, -l * 0.03);
   carGroup.add(wrapper);
 
   const worldZ = new THREE.Vector3(0, 0, 1);

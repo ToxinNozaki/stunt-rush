@@ -132,7 +132,8 @@ export class Menus {
       carList.appendChild(el);
     }
 
-    const car = CARS.find((c) => c.id === this.selectedCar);
+    const car = CARS.find((c) => c.id === this.selectedCar) || CARS[0];
+    this.selectedCar = car.id; // guards against a stale localStorage car id from a since-removed car
     const stats = $('#car-stats');
     const rows = [
       ['Speed', pct(car.engineForce / car.mass, RANGES.speed)],
